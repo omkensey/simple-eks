@@ -72,6 +72,7 @@ locals {
   vpc_cidr = data.aws_vpc.simple_eks.cidr_block
   subnets_public = local.create_subnets_public ? aws_subnet.eks_public[*].id : var.eks_subnets_public
   subnets_private = local.create_subnets_private ? aws_subnet.eks_private[*].id : var.eks_subnets_private
+  create_eks_ec2_nodegroup = var.eks_ec2_nodegroup_size > 0
   create_eks_debug_sg = var.eks_debug_sg == "" && var.create_debug_instance ? true : false
   eks_debug_sg = local.create_eks_debug_sg ? aws_security_group.eks_debug[0].id : var.eks_debug_sg
   create_eks_ssh_keypair = var.eks_ec2_ssh_keypair == "" ? true : false
@@ -301,6 +302,7 @@ resource "aws_iam_role_policy_attachment" "eks_ec2_nodegroup_policy" {
 }
 
 resource "aws_eks_node_group" "ec2" {
+  count = local.create_eks_ec2_nodegroup ? 1 : 0
   cluster_name = aws_eks_cluster.simple_eks.name
   node_group_name = "${local.unique_name}-nodegroup"
   version = aws_eks_cluster.simple_eks.version
