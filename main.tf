@@ -3,6 +3,9 @@ terraform {
     aws = {
       source = "hashicorp/aws"
     }
+    kubernetes = {
+      source = "hashicorp/kubernetes"
+    }
   }
 }
 
@@ -13,6 +16,16 @@ provider "aws" {
       Owner = var.owner
     }
   }
+}
+
+data "aws_eks_cluster_auth" "simple_eks" {
+  name = aws_eks_cluster.simple_eks.name
+}
+
+provider "kubernetes" {
+  host = aws_eks_cluster.simple_eks.endpoint
+  cluster_ca_certificate = base64decode(aws_eks_cluster.simple_eks.certificate_authority[0].data)
+  token = data.aws_eks_cluster_auth.simple_eks.token
 }
 
 data "aws_region" "current" {}
@@ -27,14 +40,18 @@ data "aws_availability_zones" "available" {
     values = ["opt-in-not-required"]
   }
   state = "available"
-  exclude_zone_ids = ["use1-az3", "usw1-az2", "cac1-az3"]
+  exclude_zone_ids = var.aws_exclude_zone_ids
 }
 
 data "aws_ssm_parameter" "al2023_eks" {
-  name = "/aws/service/eks/optimized-ami/${var.eks_k8s_version}/amazon-linux-2023/x86_64/standard/recommended/image_id"
+  name = "/aws/service/eks/optimized-ami/${coalesce(var.eks_k8s_version, local.eks_default_version)}/amazon-linux-2023/x86_64/standard/recommended/image_id"
 }
 
 data "aws_caller_identity" "eks_creator" {}
+
+data "aws_eks_cluster_versions" "all" {
+  include_all = true
+}
 
 data "aws_vpc" "simple_eks" {
   id = local.vpc_id
@@ -72,7 +89,18 @@ locals {
   vpc_cidr = data.aws_vpc.simple_eks.cidr_block
   subnets_public = local.create_subnets_public ? aws_subnet.eks_public[*].id : var.eks_subnets_public
   subnets_private = local.create_subnets_private ? aws_subnet.eks_private[*].id : var.eks_subnets_private
+  eks_default_version = one([for version in data.aws_eks_cluster_versions.all.cluster_versions : version.cluster_version if version.default_version == true])
+  eks_standard_support = [for version in data.aws_eks_cluster_versions.all.cluster_versions : version.cluster_version if version.version_status == "STANDARD_SUPPORT"]
+  eks_extended_support = [for version in data.aws_eks_cluster_versions.all.cluster_versions : version.cluster_version if version.version_status == "EXTENDED_SUPPORT"]
   create_eks_ec2_nodegroup = var.eks_ec2_nodegroup_size > 0
+  kubeconfig_rendered = (var.kubeconfig_write_file || var.kubeconfig_write_output) ? templatefile(
+    "${path.module}/templates/kubeconfig.tftpl", {
+      aws_eks_cluster_name = aws_eks_cluster.simple_eks.name
+      aws_eks_cluster_endpoint = aws_eks_cluster.simple_eks.endpoint
+      aws_eks_cluster_ca_data_base64 = aws_eks_cluster.simple_eks.certificate_authority[0].data
+      aws_authenticator_env_variables = {}
+    }
+  ) : ""
   create_eks_debug_sg = var.eks_debug_sg == "" && var.create_debug_instance ? true : false
   eks_debug_sg = local.create_eks_debug_sg ? aws_security_group.eks_debug[0].id : var.eks_debug_sg
   create_eks_ssh_keypair = var.eks_ec2_ssh_keypair == "" ? true : false
@@ -320,6 +348,12 @@ resource "aws_eks_node_group" "ec2" {
   subnet_ids = var.eks_nodegroup_public ? local.subnets_public : local.subnets_private
 }
 
+module "eks_addons" {
+  source = "${path.module}/addons"
+  cluster_name = aws_eks_cluster.simple_eks.name
+  depends_on = [ aws_eks_cluster.simple_eks ]
+}
+
 data "aws_ami" "al2023" {
   most_recent = true
 
@@ -371,5 +405,19 @@ resource "aws_instance" "eks_debug" {
   security_groups = [ local.eks_debug_sg ]
   tags = {
     Name = "${local.unique_name}-debug"
+  }
+}
+
+resource "local_sensitive_file" "eks_kubeconfig" {
+  count = var.kubeconfig_write_file ? 1 : 0
+  filename = "${path.module}/${var.kubeconfig_file_path}"
+  content = local.kubeconfig_rendered
+  depends_on = [aws_eks_cluster.simple_eks]
+}
+
+check "eks_supported" {
+  assert {
+    condition = contains(local.eks_standard_support, aws_eks_cluster.simple_eks.version)
+    error_message = "Your cluster is using an extended-support or unsupported version of EKS Kubernetes.  You may incur additional costs running this version and/or some things may not function properly.  Upgrade to one of the following versions for standard support status: ${join(", ", local.eks_extended_support)}"
   }
 }

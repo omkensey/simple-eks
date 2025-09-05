@@ -33,6 +33,12 @@ variable "aws_region" {
   default = "us-east-1"
 }
 
+variable "aws_exclude_zone_ids" {
+  description = "A list of zone IDs (not zone names) to exclude from use per AWS EKS documentation."
+  type = list(string)
+  default = [ "use1-az3", "usw1-az2", "cac1-az3" ]
+}
+
 variable "create_subnets_num" {
   description = "If public or private subnets are created, how many to create (defaults to 3, must be between 1 and 4).  If subnets are created, they are created in the first create_subnets_num AZs in the list of available AZs."
   type = number
@@ -78,8 +84,15 @@ variable "eks_subnets_private_tags" {
 }
 
 variable "eks_k8s_version" {
+  description = "If a Kubernetes version other than the current default for the default EKS version is desired, set this variable to the desired K8s version.  Note that if you set this to a version in extended support status, a warning will be generated but the cluster will still be provisioned and may incur extra costs."
   type = string
-  default = "1.30"
+  default = ""
+}
+
+variable "eks_create_extended_support_versions" {
+  description = "Whether to allow extended-support versions of EKS to be provisioned."
+  type = bool
+  default = false
 }
 
 variable "eks_ec2_nodegroup_size" {
@@ -137,4 +150,28 @@ variable "eks_debug_sg_additional_ports" {
   description = "List of TCP ports in addition to port 22 (SSH) to allow in the admin security group (defaults to 80 and 443).  If a pre-created debug security group is specified, this is ignored."
   type = list(number)
   default = [ 80, 443 ]
+}
+
+variable "kubeconfig_write_output" {
+  description = "Whether to store a templated kubeconfig in the output.  WARNING: Kubeconfig files often contain sensitive data like tokens or other credentials."
+  type = bool
+  default = false
+}
+
+variable "kubeconfig_write_file" {
+  description = "Whether to write a templated kubeconfig as a file on disk.  WARNING: Kubeconfig files often contain sensitive data like tokens or other credentials."
+  type = bool
+  default = false
+}
+
+variable "kubeconfig_file_path" {
+  description = "If a kubeconfig file is written, the path relative to the working directory to write it in."
+  type = string
+  default = "files/kubeconfig.simple_eks"
+}
+
+variable "kubeconfig_aws_authenticator_env_variables" {
+  description = "Environment variables that should be used when executing the authenticator. e.g. { AWS_PROFILE = \"eks\"}."
+  type        = map(string)
+  default     = {}
 }
