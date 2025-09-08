@@ -41,7 +41,7 @@ resource "aws_eks_addon" "simple_eks" {
 }
 
 resource "aws_iam_role" "aws_ebs_csi_driver" {
-  name = "aws-ebs-csi-driver"
+  name = "aws-ebs-csi-driver-${var.unique_name_suffix}"
   assume_role_policy = data.aws_iam_policy_document.aws_ebs_csi_driver_assumerole.json
 }
 

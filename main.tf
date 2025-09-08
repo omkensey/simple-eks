@@ -351,6 +351,7 @@ resource "aws_eks_node_group" "ec2" {
 module "eks_addons" {
   source = "./addons"
   cluster_name = aws_eks_cluster.simple_eks.name
+  unique_name_suffix = local.unique_name_suffix
   depends_on = [ aws_eks_cluster.simple_eks ]
 }
 

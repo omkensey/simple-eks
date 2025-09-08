@@ -8,3 +8,7 @@ variable "cluster_name" {
   description = "The name of the cluster to install addons into."
   type = string
 }
+
+variable "unique_name_suffix" {
+  type = string
+}
