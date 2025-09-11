@@ -360,7 +360,7 @@ module "eks_addons" {
   cluster_name = aws_eks_cluster.simple_eks.name
   unique_name_suffix = local.unique_name_suffix
   extra_addons = var.eks_extra_addons
-  depends_on = [ aws_eks_cluster.simple_eks ]
+  depends_on = [ aws_eks_node_group.ec2 ]
 }
 
 data "aws_ami" "al2023" {
