@@ -6,8 +6,33 @@ A simple Terraform config to create a small EKS cluster suitable for demos and o
 
 ## Basic structure:
 
+If run with no customization of variables, this code will provision all of the following (some of these can be supplied by the user as inputs rather than created from scratch; see [Inputs and controls](#inputs-and-controls) below):
+
+* A VPC
+* Three public subnets
+* Three private subnets
+* An Internet gateway for public-subnet inbound and outbound traffic
+* A NAT gateway for outbound private-subnet traffic
+* An SSH keypair
+* An EKS cluster with one EC2 node group
+  * An IAM role for the cluster and one for the node group
+  * An EKS access entry in the cluster to allow the user running this config to access the cluster through the AWS console
+  * A set of basic addons (EBS CSI, CSI Snapshot, Pod Identity)
+  * A default StorageClass using EBS CSI
+* Security groups, security group rules, routing tables, routes to allow all of the above to function normally
+
+Some inputs cause additional infrastructure and resources to be provisioned:
+
+* Additional public or private subnnets
+* Additional node group nodes
+* A debug instance for investigating issues with EKS nodes in private subnets and security groups to allow basic access to it
+* Additional EKS addons and access entries
+
+See below for a diagram of the resource structure.
+
 ```mermaid
-  info
+architecture-beta
+  group VPC(logos:aws-vpc)[VPC]
 ```
 
 ## Inputs and controls:
@@ -52,4 +77,4 @@ As with the input variables, most of the outputs have names that describe what t
 
 * **Kubernetes API authentication info**: The basic cluster info needed for using the cluster's API (e.g. by other Terraform providers or by `kubectl`) is output in `kubeconfig_certificate_authority_data`, `kubeconfig_eks_cluster_name`, and `kubeconfig_eks_cluster_endpoint`.  Note that this does not include a token or token command, so these outputs are not inherently sensitive, but you will not be able to use these outputs by themselves to authenticate to the cluster.  You can, however, use the cluster name to [read an authentication token from the `aws_eks_cluster_auth` data source](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/eks_cluster_auth) if another Terraform provider needs to authenticate to this cluster, or [use the AWS CLI to get the token](https://docs.aws.amazon.com/id_id/cli/latest/reference/eks/get-token.html) for other tools.
 
-* **Ready-to-use kubeconfig**: The output `kubeconfig_rendered` will contain a fully-rendered kubeconfig that uses the `aws eks get-token` command to retrieve a temporary auth token.  (Note that this requires you to have currently-valid AWS credentials to use the kubeconfig.)  This output is not actually inherently sensitive since the authentication used is AWS rather than a directly-embedded token, but is masked as a sensitive output as basic good practice since kubeconfigs in general often do contain sensitive token or client-cert info.
+* **Ready-to-use kubeconfig**: If you set `kubeconfig_write_output` to `true`, the output `kubeconfig_rendered` will contain a fully-rendered kubeconfig that uses the `aws eks get-token` command to retrieve a temporary auth token.  (Note that this requires you to have currently-valid AWS credentials to use the kubeconfig.)  This output is not actually inherently sensitive since the authentication used is AWS rather than a directly-embedded token, but is masked as a sensitive output as basic good practice since kubeconfigs in general often do contain sensitive token or client-cert info.
