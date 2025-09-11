@@ -17,13 +17,13 @@ variable "unique_name_suffix" {
 }
 
 variable "eks_ec2_ssh_keypair" {
-  description = "An AWS EC2 SSH keypair name to associate with EKS EC2 nodegroup instances."
+  description = "An existing AWS EC2 SSH keypair name to associate with EKS EC2 nodegroup instances."
   type = string
   default = ""
 }
 
 variable "admin_ip_cidr" {
-  description = "The IPv4 CIDR to allow admin access (SSH, cluster API) from.  Defaults to the external IP of the system running Terraform as returned by Akamai's whatismyip service.  To allow public access (e.g. if cluster will be used by someone else with an unknown IP), set this to 0.0.0.0/0."
+  description = "The IPv4 CIDR to allow admin access (SSH, cluster API) from.  Defaults to the external IP of the system running Terraform as returned by Akamai's whatismyip service.  To allow public access (e.g. if cluster will be used by someone else with an unknown IP), set this to `0.0.0.0/0`."
   type = string
   default = ""
 }
@@ -34,7 +34,7 @@ variable "aws_region" {
 }
 
 variable "aws_exclude_zone_ids" {
-  description = "A list of zone IDs (not zone names) to exclude from use per AWS EKS documentation."
+  description = "A list of zone IDs (not zone names) to exclude from use per AWS EKS documentation.  Should not be changed unless the documented zone exclusions change."
   type = list(string)
   default = [ "use1-az3", "usw1-az2", "cac1-az3" ]
 }
@@ -89,8 +89,14 @@ variable "eks_k8s_version" {
   default = ""
 }
 
+variable "eks_extra_addons" {
+  description = "A list of names of EKS addons to be installed.  Note that some addons require additional resources to function."
+  type = list(string)
+  default = []
+}
+
 variable "eks_create_extended_support_versions" {
-  description = "Whether to allow extended-support versions of EKS to be provisioned."
+  description = "(Not currently implemented) Whether to allow extended-support versions of EKS to be provisioned."
   type = bool
   default = false
 }

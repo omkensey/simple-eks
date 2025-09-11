@@ -9,8 +9,8 @@ data "aws_region" "current" {}
 locals {
   aws_account_id = data.aws_caller_identity.eks_creator.account_id
   aws_region = data.aws_region.current.region
-  eks_cluster_identity_oidc = trimprefix("https://", data.aws_eks_cluster.simple_eks.identity[0].oidc[0].issuer)
-  addon_configuration_values = [ ]
+  addon_list = flatten([var.basic_addons, var.extra_addons])
+  addon_configuration_values = []
   addon_identity_service_account_roles = [
     {
       addon_name = "aws-ebs-csi-driver"
@@ -26,7 +26,7 @@ locals {
 }
 
 resource "aws_eks_addon" "simple_eks" {
-  for_each = toset(var.install_addons)
+  for_each = toset(local.addon_list)
   cluster_name = data.aws_eks_cluster.simple_eks.name
   addon_name = each.key
   resolve_conflicts_on_update = "PRESERVE"
@@ -67,7 +67,7 @@ resource "aws_iam_role_policy_attachment" "aws_ebs_csi_driver" {
 }
 
 resource "kubernetes_storage_class_v1" "aws_ebs_csi" {
-  count = contains(var.install_addons, "aws-ebs-csi-driver") ? 1 : 0
+  count = contains(local.addon_list, "aws-ebs-csi-driver") ? 1 : 0
   metadata {
     name = "ebs-csi"
     annotations = {
