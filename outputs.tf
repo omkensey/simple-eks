@@ -19,7 +19,7 @@ output "aws_eks_ec2_ssh_privkey_file" {
 }
 
 output "aws_eks_region" {
-  value = regex(".*\\.([a-z0-9-]*)\\Q.eks.amazonaws.com\\E", aws_eks_cluster.simple_eks.endpoint)[0]
+  value = var.aws_region
 }
 
 output "aws_eks_cluster_security_groups" {
@@ -40,4 +40,9 @@ output "kubeconfig_eks_cluster_name" {
 
 output "kubeconfig_eks_cluster_endpoint" {
   value = aws_eks_cluster.simple_eks.endpoint
+}
+
+output "kubeconfig_rendered" {
+  value = var.kubeconfig_write_output ? local.kubeconfig_rendered : ""
+  sensitive = true
 }

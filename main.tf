@@ -3,6 +3,9 @@ terraform {
     aws = {
       source = "hashicorp/aws"
     }
+    kubernetes = {
+      source = "hashicorp/kubernetes"
+    }
   }
 }
 
@@ -13,6 +16,16 @@ provider "aws" {
       Owner = var.owner
     }
   }
+}
+
+data "aws_eks_cluster_auth" "simple_eks" {
+  name = aws_eks_cluster.simple_eks.name
+}
+
+provider "kubernetes" {
+  host = aws_eks_cluster.simple_eks.endpoint
+  cluster_ca_certificate = base64decode(aws_eks_cluster.simple_eks.certificate_authority[0].data)
+  token = data.aws_eks_cluster_auth.simple_eks.token
 }
 
 data "aws_region" "current" {}
@@ -27,14 +40,20 @@ data "aws_availability_zones" "available" {
     values = ["opt-in-not-required"]
   }
   state = "available"
-  exclude_zone_ids = ["use1-az3", "usw1-az2", "cac1-az3"]
+  exclude_zone_ids = var.aws_exclude_zone_ids
 }
 
+/*
 data "aws_ssm_parameter" "al2023_eks" {
-  name = "/aws/service/eks/optimized-ami/${var.eks_k8s_version}/amazon-linux-2023/x86_64/standard/recommended/image_id"
+  name = "/aws/service/eks/optimized-ami/${coalesce(var.eks_k8s_version, local.eks_default_version)}/amazon-linux-2023/x86_64/standard/recommended/image_id"
 }
+*/
 
 data "aws_caller_identity" "eks_creator" {}
+
+data "aws_eks_cluster_versions" "all" {
+  include_all = true
+}
 
 data "aws_vpc" "simple_eks" {
   id = local.vpc_id
@@ -61,7 +80,7 @@ locals {
   unique_name_prefix = coalesce(var.unique_name_prefix, random_string.unique_name_prefix.result)
   unique_name_suffix = coalesce(var.unique_name_suffix, random_string.unique_name_suffix.result)
   unique_name = "${var.unique_name_prefix}-eks-${local.unique_name_suffix}"
-  eks_nodegroup_ami = data.aws_ssm_parameter.al2023_eks.value
+  # eks_nodegroup_ami = data.aws_ssm_parameter.al2023_eks.value
   public_subnet_cidr = cidrsubnet(var.aws_vpc_cidr,2,0)
   private_subnet_cidr = cidrsubnet(var.aws_vpc_cidr,2,2)
   admin_ip_cidr = coalesce(var.admin_ip_cidr, "${data.http.admin_ip.response_body}/32")
@@ -72,7 +91,18 @@ locals {
   vpc_cidr = data.aws_vpc.simple_eks.cidr_block
   subnets_public = local.create_subnets_public ? aws_subnet.eks_public[*].id : var.eks_subnets_public
   subnets_private = local.create_subnets_private ? aws_subnet.eks_private[*].id : var.eks_subnets_private
+  eks_default_version = one([for version in data.aws_eks_cluster_versions.all.cluster_versions : version.cluster_version if version.default_version == true])
+  eks_standard_support = [for version in data.aws_eks_cluster_versions.all.cluster_versions : version.cluster_version if version.version_status == "STANDARD_SUPPORT"]
+  eks_extended_support = [for version in data.aws_eks_cluster_versions.all.cluster_versions : version.cluster_version if version.version_status == "EXTENDED_SUPPORT"]
   create_eks_ec2_nodegroup = var.eks_ec2_nodegroup_size > 0
+  kubeconfig_rendered = (var.kubeconfig_write_file || var.kubeconfig_write_output) ? templatefile(
+    "${path.module}/templates/kubeconfig.tftpl", {
+      aws_eks_cluster_name = aws_eks_cluster.simple_eks.name
+      aws_eks_cluster_endpoint = aws_eks_cluster.simple_eks.endpoint
+      aws_eks_cluster_ca_data_base64 = aws_eks_cluster.simple_eks.certificate_authority[0].data
+      aws_authenticator_env_variables = {}
+    }
+  ) : ""
   create_eks_debug_sg = var.eks_debug_sg == "" && var.create_debug_instance ? true : false
   eks_debug_sg = local.create_eks_debug_sg ? aws_security_group.eks_debug[0].id : var.eks_debug_sg
   create_eks_ssh_keypair = var.eks_ec2_ssh_keypair == "" ? true : false
@@ -182,12 +212,14 @@ resource "aws_nat_gateway" "eks_private" {
   }
 }
 
+/*
 data "aws_nat_gateway" "eks_private" {
   tags = {
     Name = "${local.unique_name}-private"
   }
   depends_on = [ aws_nat_gateway.eks_private ]
 }
+*/
 
 resource "aws_route_table" "eks_private_nat" {
   count = local.create_subnets_private ? 1 : 0
@@ -253,7 +285,7 @@ resource "aws_eks_cluster" "simple_eks" {
 
   vpc_config {
     subnet_ids = local.subnets_public
-    public_access_cidrs = flatten([ local.admin_ip_cidr, formatlist("%s/32", data.aws_nat_gateway.eks_private[*].public_ip)])
+    public_access_cidrs = flatten([ local.admin_ip_cidr, formatlist("%s/32", aws_nat_gateway.eks_private[*].public_ip)])
   }
 
   version = var.eks_k8s_version == "" ? null : var.eks_k8s_version
@@ -270,7 +302,9 @@ resource "aws_eks_cluster" "simple_eks" {
   # Ensure that IAM Role permissions are created before and deleted after EKS Cluster handling.
   # Otherwise, EKS will not be able to properly delete EKS managed EC2 infrastructure such as Security Groups.
   depends_on = [
-    aws_iam_role_policy_attachment.eks_cluster_policy
+    aws_iam_role_policy_attachment.eks_cluster_policy,
+    aws_route_table_association.eks_private_nat,
+    aws_internet_gateway_attachment.eks_public
   ]
 }
 
@@ -307,6 +341,7 @@ resource "aws_eks_node_group" "ec2" {
   node_group_name = "${local.unique_name}-nodegroup"
   version = aws_eks_cluster.simple_eks.version
   ami_type = "AL2023_x86_64_STANDARD"
+  capacity_type = "ON_DEMAND"
   instance_types = [var.eks_ec2_nodegroup_instancetype]
   scaling_config {
     desired_size = var.eks_ec2_nodegroup_size
@@ -318,6 +353,14 @@ resource "aws_eks_node_group" "ec2" {
   }
   node_role_arn = aws_iam_role.eks_ec2_nodegroup.arn
   subnet_ids = var.eks_nodegroup_public ? local.subnets_public : local.subnets_private
+}
+
+module "eks_addons" {
+  source = "./addons"
+  cluster_name = aws_eks_cluster.simple_eks.name
+  unique_name_suffix = local.unique_name_suffix
+  extra_addons = var.eks_extra_addons
+  depends_on = [ aws_eks_node_group.ec2 ]
 }
 
 data "aws_ami" "al2023" {
@@ -371,5 +414,23 @@ resource "aws_instance" "eks_debug" {
   security_groups = [ local.eks_debug_sg ]
   tags = {
     Name = "${local.unique_name}-debug"
+  }
+}
+
+resource "local_sensitive_file" "eks_kubeconfig" {
+  count = var.kubeconfig_write_file ? 1 : 0
+  filename = "${path.module}/${var.kubeconfig_file_path}"
+  content = local.kubeconfig_rendered
+  depends_on = [aws_eks_cluster.simple_eks]
+}
+
+check "eks_supported" {
+  assert {
+    condition = !contains(local.eks_extended_support, aws_eks_cluster.simple_eks.version)
+    error_message = "Your cluster is using an extended-support version of EKS Kubernetes.  You may incur additional costs running this version and/or some things may not function properly.  Upgrade to one of the following versions for standard support status: ${join(", ", local.eks_standard_support)}"
+  }
+  assert {
+    condition = contains(local.eks_standard_support, aws_eks_cluster.simple_eks.version) || contains(local.eks_extended_support, aws_eks_cluster.simple_eks.version)
+    error_message = "Your cluster is using an unsupported version of EKS Kubernetes.  You may incur additional costs running this version and/or some things may not function properly.  Upgrade to one of the following versions for standard support status: ${join(", ", local.eks_standard_support)}"
   }
 }
