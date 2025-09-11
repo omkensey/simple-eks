@@ -28,13 +28,6 @@ Some inputs cause additional infrastructure and resources to be provisioned:
 * A debug instance for investigating issues with EKS nodes in private subnets and security groups to allow basic access to it
 * Additional EKS addons and access entries
 
-See below for a diagram of the resource structure.
-
-```mermaid
-architecture-beta
-  group VPC(logos:aws-vpc)[VPC]
-```
-
 ## Inputs and controls:
 
 Most variables are either obvious from the name (e.g. `aws_region`) or have a short description in `variables.tf`.  Some of the more useful ones to know are:
