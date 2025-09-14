@@ -15,7 +15,7 @@ output "aws_eks_ec2_ssh_keypair" {
 }
 
 output "aws_eks_ec2_ssh_privkey_file" {
-  value = local.create_eks_ssh_keypair == true ? local_sensitive_file.ssh_private_key[0].filename : "No local SSH key was created."
+  value = local.create_eks_ssh_keypair == true ? local_sensitive_file.ssh_private_key[0].filename : null
 }
 
 output "aws_eks_region" {
@@ -27,7 +27,7 @@ output "aws_eks_cluster_security_groups" {
 }
 
 output "eks_debug_instance_ip" {
-  value = var.create_debug_instance ? aws_instance.eks_debug[0].public_ip : "n/a"
+  value = var.create_debug_instance ? aws_instance.eks_debug[0].public_ip : null
 }
 
 output "kubeconfig_certificate_authority_data" {
@@ -43,6 +43,10 @@ output "kubeconfig_eks_cluster_endpoint" {
 }
 
 output "kubeconfig_rendered" {
-  value = var.kubeconfig_write_output ? local.kubeconfig_rendered : ""
+  value = var.kubeconfig_write_output ? local.kubeconfig_rendered : null
   sensitive = true
+}
+
+output "kubeconfig_file_path" {
+  value = var.kubeconfig_write_file ? local_sensitive_file.eks_kubeconfig[0].filename : null
 }

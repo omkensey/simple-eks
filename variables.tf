@@ -171,9 +171,21 @@ variable "kubeconfig_write_file" {
 }
 
 variable "kubeconfig_file_path" {
-  description = "If a kubeconfig file is written, the path relative to the working directory to write it in."
+  description = "If set, and a kubeconfig file is written, defines the path relative to the working directory to write it in."
   type = string
-  default = "files/kubeconfig.simple_eks"
+  default = ""
+}
+
+variable "kubeconfig_file_path_prefix" {
+  description = "If set, and a kubeconfig file is written, defines the prefix of the path relative to the working directory to write it in.  This prefix will be used wih the unique name of the cluster and the suffix, concatenated with dashes and with the extension `.yaml`, to generate the complete file path."
+  type = string
+  default = "files/kubeconfig"
+}
+
+variable "kubeconfig_file_path_suffix" {
+  description = "If set, and a kubeconfig file is written, defines the suffix of the path relative to the working directory to write it in.  The prefix will be used wih the unique name of the cluster and this suffix, concatenated with dashes and with the extension `.yaml`, to generate the complete file path."
+  type = string
+  default = ""
 }
 
 variable "kubeconfig_aws_authenticator_env_variables" {

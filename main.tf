@@ -103,6 +103,7 @@ locals {
       aws_authenticator_env_variables = {}
     }
   ) : ""
+  kubeconfig_file_path = var.kubeconfig_file_path != "" ? var.kubeconfig_file_path : "${var.kubeconfig_file_path_prefix}-${local.unique_name}${var.kubeconfig_file_path_suffix != "" ? "-" : ""}${var.kubeconfig_file_path_suffix}.yaml"
   create_eks_debug_sg = var.eks_debug_sg == "" && var.create_debug_instance ? true : false
   eks_debug_sg = local.create_eks_debug_sg ? aws_security_group.eks_debug[0].id : var.eks_debug_sg
   create_eks_ssh_keypair = var.eks_ec2_ssh_keypair == "" ? true : false
@@ -419,7 +420,7 @@ resource "aws_instance" "eks_debug" {
 
 resource "local_sensitive_file" "eks_kubeconfig" {
   count = var.kubeconfig_write_file ? 1 : 0
-  filename = "${path.module}/${var.kubeconfig_file_path}"
+  filename = "${path.module}/${local.kubeconfig_file_path}"
   content = local.kubeconfig_rendered
   depends_on = [aws_eks_cluster.simple_eks]
 }
