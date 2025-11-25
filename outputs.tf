@@ -26,6 +26,10 @@ output "aws_eks_cluster_security_groups" {
   value = aws_eks_cluster.simple_eks.vpc_config[*].cluster_security_group_id
 }
 
+output "eks_cluster_node_ips" {
+  value = zipmap(data.aws_instances.simple_eks_nodes.private_ips, data.aws_instances.simple_eks_nodes.public_ips)
+}
+
 output "eks_debug_instance_ip" {
   value = var.create_debug_instance ? aws_instance.eks_debug[0].public_ip : null
 }

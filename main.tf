@@ -286,6 +286,8 @@ resource "aws_eks_cluster" "simple_eks" {
 
   vpc_config {
     subnet_ids = local.subnets_public
+    endpoint_private_access = true
+    endpoint_public_access = true
     public_access_cidrs = flatten([ local.admin_ip_cidr, formatlist("%s/32", aws_nat_gateway.eks_private[*].public_ip)])
   }
 
@@ -433,5 +435,11 @@ check "eks_supported" {
   assert {
     condition = contains(local.eks_standard_support, aws_eks_cluster.simple_eks.version) || contains(local.eks_extended_support, aws_eks_cluster.simple_eks.version)
     error_message = "Your cluster is using an unsupported version of EKS Kubernetes.  You may incur additional costs running this version and/or some things may not function properly.  Upgrade to one of the following versions for standard support status: ${join(", ", local.eks_standard_support)}"
+  }
+}
+
+data "aws_instances" "simple_eks_nodes" {
+  instance_tags = {
+    "eks:cluster-name" = aws_eks_cluster.simple_eks.name
   }
 }
