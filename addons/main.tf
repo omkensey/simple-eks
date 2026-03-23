@@ -1,15 +1,66 @@
+terraform {
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+    }
+    kubernetes = {
+      source = "hashicorp/kubernetes"
+    }
+  }
+}
+
+provider "aws" {
+  region = local.aws_region
+}
+
 data "aws_eks_cluster" "simple_eks" {
-  name = var.cluster_name
+  name = local.cluster_name
+  region = local.aws_region
 }
 
 data "aws_caller_identity" "eks_creator" {}
 
 data "aws_region" "current" {}
 
+data "aws_eks_cluster_auth" "simple_eks" {
+  name = data.aws_eks_cluster.simple_eks.name
+  region = local.aws_region
+}
+
+provider "kubernetes" {
+  host = data.aws_eks_cluster.simple_eks.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.simple_eks.certificate_authority[0].data)
+  token = data.aws_eks_cluster_auth.simple_eks.token
+}
+
+/*
+# If you are using a supported remote-state backend, insert its config here, uncomment this block and comment out the next
+data "terraform_remote_state" "remote_workspace" {
+  backend = "remote"
+
+}
+*/
+
+# If you are using a remote-state backend, insert its config above, uncomment that block and comment out this one
+data "terraform_remote_state" "remote_workspace" {
+  backend = "local"
+  config = {
+    path = "${path.module}/${var.cluster_config_dir}/terraform.tfstate"
+  }
+}
+
+resource "random_string" "unique_name_suffix" {
+  length = 8
+  upper = false
+  special = false
+}
+
 locals {
+  unique_name_suffix = coalesce(var.unique_name_suffix, random_string.unique_name_suffix.result)
   aws_account_id = data.aws_caller_identity.eks_creator.account_id
-  aws_region = data.aws_region.current.region
-  addon_list = flatten([var.basic_addons, var.extra_addons])
+  aws_region = coalesce(var.aws_region, lookup(data.terraform_remote_state.remote_workspace.outputs, var.cluster_config_aws_region_output, null))
+  cluster_name = coalesce(var.cluster_name, lookup(data.terraform_remote_state.remote_workspace.outputs, var.cluster_config_cluster_name_output, null))
+  addon_list = setsubtract(flatten([var.basic_addons, var.extra_addons]), var.skip_addons)
   addon_configuration_values = []
   addon_identity_service_account_roles = [
     {
@@ -27,7 +78,7 @@ locals {
 
 resource "aws_eks_addon" "simple_eks" {
   for_each = toset(local.addon_list)
-  cluster_name = data.aws_eks_cluster.simple_eks.name
+  cluster_name = local.cluster_name
   addon_name = each.key
   resolve_conflicts_on_update = "PRESERVE"
   configuration_values = one([for addon, config in local.addon_configuration_values : jsonencode(config) if addon == each.key])

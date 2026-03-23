@@ -6,6 +6,8 @@ A simple Terraform config to create a small EKS cluster suitable for demos and o
 
 ## Basic structure:
 
+### cluster directory - the EKS cluster itself
+
 If run with no customization of variables, this code will provision all of the following (some of these can be supplied by the user as inputs rather than created from scratch; see [Inputs and controls](#inputs-and-controls) below):
 
 * A VPC
@@ -17,8 +19,6 @@ If run with no customization of variables, this code will provision all of the f
 * An EKS cluster with one EC2 node group
   * An IAM role for the cluster and one for the node group
   * An EKS access entry in the cluster to allow the user running this config to access the cluster through the AWS console
-  * A set of basic addons (EBS CSI, CSI Snapshot, Pod Identity)
-  * A default StorageClass using EBS CSI
 * Security groups, security group rules, routing tables, routes to allow all of the above to function normally
 
 Some inputs cause additional infrastructure and resources to be provisioned:
@@ -28,7 +28,7 @@ Some inputs cause additional infrastructure and resources to be provisioned:
 * A debug instance for investigating issues with EKS nodes in private subnets and security groups to allow basic access to it
 * Additional EKS addons and access entries
 
-## Inputs and controls:
+#### Inputs and controls:
 
 Most variables are either obvious from the name (e.g. `aws_region`) or have a short description in `variables.tf`.  Some of the more useful ones to know are:
 
@@ -48,7 +48,7 @@ Most variables are either obvious from the name (e.g. `aws_region`) or have a sh
 
 * **Private-node debug jump host**: If you are setting up a cluster with the node group in private subnets, you may want to create a debug instance in the public subnet by setting `create_debug_instance` to `true`.  This will allow you to use the debug instance either directly as a host for debug utilities, or as a jump host to SSH to the private nodes (e.g. `ssh-add` the appropriate private key, then `ssh -i [private key] -A -J ec2-user@[debug instance public IP] ec2-user@[node private IP]`).
 
-### Non-configurable cluster attributes:
+#### Non-configurable cluster attributes:
 
 The following items are not configurable without forking and customizing this config:
 
@@ -60,7 +60,7 @@ The following items are not configurable without forking and customizing this co
 * Addons installed by default: Pod Identity Agent, EBS CSI Driver, CSI Snapshot
 * Default StorageClass: EBS CSI
 
-## Outputs
+#### Outputs
 
 As with the input variables, most of the outputs have names that describe what they are.  Some of the more notable ones:
 
@@ -74,3 +74,15 @@ As with the input variables, most of the outputs have names that describe what t
   * If you set `kubeconfig_write_output` to `true`, the output `kubeconfig_rendered` will contain a fully-rendered kubeconfig that uses the `aws eks get-token` command to retrieve a temporary auth token.  (Note that this requires you to have currently-valid AWS credentials to use the kubeconfig.)
     * This output is not actually inherently sensitive since the authentication used is AWS rather than a directly-embedded token, but is masked as a sensitive output as basic good practice since kubeconfigs in general often do contain sensitive token or client-cert info.
   * If you set `kubeconfig_write_file` to `true`, the output `kubeconfig_file_path` will show the path to the written kubeconfig.
+
+### addons directory - basic addons for the cluster
+
+If run with no customization of variables, this code will provision a basic set of EKS addons and related resources:
+
+* EBS CSI addon
+  * AWS role resources necessary to make the addon function
+  * A default StorageClass using EBS CSI
+* CSI Snapshot addon
+* Pod Identity addon
+
+By default the `addons` config assumes the target cluster was provisioned using this repository structure, i.e. that the `cluster` directory exists alongside this one and that its config was already run.  However, if the cluster was provisioned by other means (e.g. using `eksctl`), this config can still be used to run the addon install by setting the `cluster_name` and `region` variables.

@@ -89,12 +89,6 @@ variable "eks_k8s_version" {
   default = ""
 }
 
-variable "eks_extra_addons" {
-  description = "A list of names of EKS addons to be installed.  Note that some addons require additional resources to function."
-  type = list(string)
-  default = []
-}
-
 variable "eks_create_extended_support_versions" {
   description = "(Not currently implemented) Whether to allow extended-support versions of EKS to be provisioned."
   type = bool

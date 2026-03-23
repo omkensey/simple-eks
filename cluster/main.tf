@@ -3,9 +3,6 @@ terraform {
     aws = {
       source = "hashicorp/aws"
     }
-    kubernetes = {
-      source = "hashicorp/kubernetes"
-    }
   }
 }
 
@@ -16,16 +13,6 @@ provider "aws" {
       Owner = var.owner
     }
   }
-}
-
-data "aws_eks_cluster_auth" "simple_eks" {
-  name = aws_eks_cluster.simple_eks.name
-}
-
-provider "kubernetes" {
-  host = aws_eks_cluster.simple_eks.endpoint
-  cluster_ca_certificate = base64decode(aws_eks_cluster.simple_eks.certificate_authority[0].data)
-  token = data.aws_eks_cluster_auth.simple_eks.token
 }
 
 data "aws_region" "current" {}
@@ -358,14 +345,6 @@ resource "aws_eks_node_group" "ec2" {
   subnet_ids = var.eks_nodegroup_public ? local.subnets_public : local.subnets_private
 }
 
-module "eks_addons" {
-  source = "./addons"
-  cluster_name = aws_eks_cluster.simple_eks.name
-  unique_name_suffix = local.unique_name_suffix
-  extra_addons = var.eks_extra_addons
-  depends_on = [ aws_eks_node_group.ec2 ]
-}
-
 data "aws_ami" "al2023" {
   most_recent = true
 
@@ -420,6 +399,7 @@ resource "aws_instance" "eks_debug" {
   }
 }
 
+# Adapted from the template in Anton Babenko's terraform-aws-modules/eks
 resource "local_sensitive_file" "eks_kubeconfig" {
   count = var.kubeconfig_write_file ? 1 : 0
   filename = "${path.module}/${local.kubeconfig_file_path}"
