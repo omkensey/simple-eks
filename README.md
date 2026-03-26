@@ -86,3 +86,9 @@ If run with no customization of variables, this code will provision a basic set 
 * Pod Identity addon
 
 By default the `addons` config assumes the target cluster was provisioned using this repository structure, i.e. that the `cluster` directory exists alongside this one and that its config was already run.  However, if the cluster was provisioned by other means (e.g. using `eksctl`), this config can still be used to run the addon install by setting the `cluster_name` and `region` variables.
+
+The addons to be installed can be customized a number of ways:
+
+* To skip a default addon, set the variable `basic_addons` to a list of addon names that does not include the one to skip.
+* To install an addon that does not depend on other resources like IAM roles, you can set either `basic_addons` or `extra_addons` to a list that includes it.
+  * The difference in behavior between the two is that whatever you set `basic_addons` to overrides the entire built-in list, where `extra_addons` is always added to the `basic_addons` list.
